@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" sizes="16x16" href="img/favicon.png">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Визуальная новелла</title>
+    <style>
+
+        @font-face {
+            font-family: 'PressStart2P';
+            src: url('fonts/PressStart2P-Regular.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: "Press Start 2P", system-ui;
+        }
+        
+
+        canvas {
+            border: 2px solid #444;
+            background: #000;
+            cursor: pointer;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="343" height="600"></canvas>
+    <div class="controls">
+        <div>Кликай для продолжения</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Игровое состояние
+        let currentScene = 1;
+        let currentText = 0;
+        let displayedText = '';
+        let textIndex = 0;
+        let isTyping = false;
+        let showChoices = false;
+        let showEndButton = false;
+        
+        // Загруженные изображения
+        const images = {};
+        const imageNames = ['1.png', '2.png', '3.png', '4.png', '5.png', '6.png', 'final.png', 'dialog.png'];
+        let imagesLoaded = 0;
+        
+        // Тексты по сценам
+        const gameTexts = {
+            1: [
+                "Я так хочу отправить подарок моей принцессе!",
+                "Был бы только способ как доставить посылку..."
+            ],
+            2: [
+                "НП Рыцарь: Я помогу тебе с доставкой! Довезу её в целости и сохранности!",
+                "Принц: Благодарю тебя! Но учти, посылку так же стоит доставить вовремя!",
+                "НП Рыцарь: Без проблем!"
+            ],
+            3: [
+                "Перед тобой три пути..."
+            ],
+            4: [
+                "Кажется, придётся преодолеть тернистый путь..."
+            ],
+            5: [
+                "Что-то подсказывает вам вернуться к порталу."
+            ],
+            6: [
+                "Вы добрались до замка принцессы!",
+                "Вы прошли квест и смогли доставить посылку!"
+            ],
+            'final': [
+                "Принцесса: Благодарю тебя за доставленный подарок от принца!",
+                "НП Рыцарь: Имею честь! Это просто моя работа.",
+                "Поздравляем! Вы прошли квест!"
+            ]
+        };
+        
+        // Варианты выбора для сцены 3
+        const choices = [
+            "Пойти налево",
+            "Пойти прямо", 
+            "Пойти к Порталу"
+        ];
+        
+        // Загрузка изображений
+        function loadImages() {
+            imageNames.forEach(name => {
+                const img = new Image();
+                img.onload = () => {
+                    imagesLoaded++;
+                    if (imagesLoaded === imageNames.length) {
+                        startGame();
+                    }
+                };
+                img.onerror = () => {
+                    console.warn(`Не удалось загрузить img/${name}, используется заглушка`);
+                    imagesLoaded++;
+                    if (imagesLoaded === imageNames.length) {
+                        startGame();
+                    }
+                };
+                img.src = `img/${name}`;
+                images[name] = img;
+            });
+        }
+        
+        // Отрисовка фона
+        function drawBackground() {
+            let bgImage;
+            if (currentScene <= 6) {
+                bgImage = images[`${currentScene}.png`];
+            } else {
+                bgImage = images['final.png'];
+            }
+            
+            if (bgImage && bgImage.complete) {
+                // Масштабирование изображения 1024x1536 к размеру 343x600
+                ctx.drawImage(bgImage, 0, 0, 1024, 1536, 0, 0, 343, 600);
+            } else {
+                // Заглушка
+                const colors = ['#001122', '#112200', '#220011', '#002211', '#110022', '#221100'];
+                ctx.fillStyle = colors[currentScene - 1] || '#000033';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Номер сцены как заглушка
+                ctx.fillStyle = 'white';
+                ctx.font = '48px PressStart2P';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Сцена ${currentScene}`, canvas.width/2, canvas.height/2);
+            }
+        }
+        
+        // Отрисовка диалогового окна
+        function drawDialog() {
+            const dialogImg = images['dialog.png'];
+            
+            // Размеры и позиция диалогового окна
+            const dialogWidth = 300; // Масштабированная ширина
+            const dialogHeight = 90;  // Масштабированная высота
+            const dialogX = (canvas.width - dialogWidth) / 2;
+            const dialogY = canvas.height - dialogHeight - 20;
+            
+            if (dialogImg && dialogImg.complete) {
+                ctx.drawImage(dialogImg, 0, 0, 771, 231, dialogX, dialogY, dialogWidth, dialogHeight);
+            } else {
+                // Заглушка диалогового окна
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fillRect(dialogX, dialogY, dialogWidth, dialogHeight);
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(dialogX, dialogY, dialogWidth, dialogHeight);
+            }
+            
+            // Текст в диалоговом окне
+            ctx.fillStyle = 'white';
+            ctx.font = '10px PressStart2P';
+            ctx.textAlign = 'left';
+            
+            const textX = dialogX + 20;
+            const textY = dialogY + 30;
+            const maxWidth = dialogWidth - 40;
+            
+            if (showChoices && currentScene === 3) {
+                // Отображение кнопок выбора
+                drawChoices();
+            } else if (showEndButton) {
+                // Отображение кнопки Новой Почты
+                drawEndButton();
+            } else {
+                // Обычный текст
+                wrapText(displayedText, textX, textY, maxWidth, 18);
+            }
+        }
+        
+        // Отрисовка кнопок выбора
+        function drawChoices() {
+            const buttonWidth = 280;
+            const buttonHeight = 35;
+            const buttonX = (canvas.width - buttonWidth) / 2;
+            let buttonY = canvas.height - 180;
+            
+            choices.forEach((choice, index) => {
+                // Кнопка
+                ctx.fillStyle = 'rgba(100, 100, 200, 0.8)';
+                ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
+                
+                // Текст кнопки
+                ctx.fillStyle = 'white';
+                ctx.font = '8px PressStart2P';
+                ctx.textAlign = 'center';
+                ctx.fillText(choice, buttonX + buttonWidth/2, buttonY + buttonHeight/2 + 4);
+                
+                buttonY += buttonHeight + 10;
+            });
+        }
+        
+        // Отрисовка кнопки Новой Почты
+        function drawEndButton() {
+            const buttonWidth = 280;
+            const buttonHeight = 40;
+            const buttonX = (canvas.width - buttonWidth) / 2;
+            const buttonY = canvas.height - 120;
+            
+            // Кнопка
+            ctx.fillStyle = 'rgba(200, 100, 100, 0.8)';
+            ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
+            
+            // Текст кнопки
+            ctx.fillStyle = 'white';
+            ctx.font = '8px PressStart2P';
+            ctx.textAlign = 'center';
+            ctx.fillText('Посетить сайт Новой Почты', buttonX + buttonWidth/2, buttonY + buttonHeight/2 + 4);
+        }
+        
+        // Перенос текста
+        function wrapText(text, x, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let line = '';
+            
+            for (let n = 0; n < words.length; n++) {
+                const testLine = line + words[n] + ' ';
+                const metrics = ctx.measureText(testLine);
+                const testWidth = metrics.width;
+                
+                if (testWidth > maxWidth && n > 0) {
+                    ctx.fillText(line, x, y);
+                    line = words[n] + ' ';
+                    y += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            }
+            ctx.fillText(line, x, y);
+        }
+        
+        // Анимация печати текста
+        function typeText() {
+            if (!isTyping) return;
+            
+            const fullText = gameTexts[currentScene][currentText];
+            if (textIndex < fullText.length) {
+                displayedText = fullText.substring(0, textIndex + 1);
+                textIndex++;
+                setTimeout(typeText, 50); // Скорость печати
+            } else {
+                isTyping = false;
+            }
+        }
+        
+        // Начать показ текста
+        function showText() {
+            const texts = gameTexts[currentScene];
+            if (currentText < texts.length) {
+                displayedText = '';
+                textIndex = 0;
+                isTyping = true;
+                showChoices = false;
+                showEndButton = false;
+                typeText();
+            } else if (currentScene === 3) {
+                // Показать кнопки выбора после всех текстов сцены 3
+                showChoices = true;
+            } else if (currentScene === 'final' && currentText >= gameTexts['final'].length) {
+                // Показать кнопку Новой Почты в самом конце
+                showEndButton = true;
+            }
+        }
+        
+        // Следующий текст
+        function nextText() {
+            if (isTyping) {
+                // Пропустить анимацию
+                displayedText = gameTexts[currentScene][currentText];
+                isTyping = false;
+                return;
+            }
+            
+            if (showChoices || showEndButton) return; // Не продолжаем если показаны кнопки
+            
+            currentText++;
+            const texts = gameTexts[currentScene];
+            
+            if (currentText < texts.length) {
+                showText();
+            } else {
+                // Специальная обработка для сцены 3 - показать кнопки
+                if (currentScene === 3) {
+                    showChoices = true;
+                    return;
+                }
+                
+                // Специальная обработка для финала - показать кнопку Новой Почты
+                if (currentScene === 'final') {
+                    showEndButton = true;
+                    return;
+                }
+                
+                // Переход к следующей сцене
+                if (currentScene === 1) {
+                    currentScene = 2;
+                    currentText = 0;
+                    showText();
+                } else if (currentScene === 2) {
+                    currentScene = 3;
+                    currentText = 0;
+                    showText();
+                } else if (currentScene === 4) {
+                    currentScene = 5;
+                    currentText = 0;
+                    showText();
+                } else if (currentScene === 5) {
+                    currentScene = 6;
+                    currentText = 0;
+                    showText();
+                } else if (currentScene === 6) {
+                    currentScene = 'final';
+                    currentText = 0;
+                    showText();
+                }
+            }
+        }
+        
+        // Обработка выбора
+        function handleChoice(choiceIndex) {
+            if (!showChoices) return;
+            
+            showChoices = false;
+            currentText = 0;
+            
+            if (choiceIndex === 0 || choiceIndex === 1) {
+                // Налево или прямо: Сцена 4
+                currentScene = 4;
+            } else if (choiceIndex === 2) {
+                // К Порталу: Сцена 5 с особым текстом
+                currentScene = 5;
+                gameTexts[5] = ["Вы решили пройти к порталу. Кажется, это было правильное решение."];
+            }
+            
+            showText();
+        }
+        
+        // Проверка клика по кнопкам выбора
+        function checkChoiceClick(x, y) {
+            if (!showChoices) return -1;
+            
+            const buttonWidth = 280;
+            const buttonHeight = 35;
+            const buttonX = (canvas.width - buttonWidth) / 2;
+            let buttonY = canvas.height - 180;
+            
+            for (let i = 0; i < choices.length; i++) {
+                if (x >= buttonX && x <= buttonX + buttonWidth &&
+                    y >= buttonY && y <= buttonY + buttonHeight) {
+                    return i;
+                }
+                buttonY += buttonHeight + 10;
+            }
+            return -1;
+        }
+        
+        // Проверка клика по кнопке Новой Почты
+        function checkEndButtonClick(x, y) {
+            if (!showEndButton) return false;
+            
+            const buttonWidth = 280;
+            const buttonHeight = 40;
+            const buttonX = (canvas.width - buttonWidth) / 2;
+            const buttonY = canvas.height - 120;
+            
+            return (x >= buttonX && x <= buttonX + buttonWidth &&
+                    y >= buttonY && y <= buttonY + buttonHeight);
+        }
+        
+        // Игровой цикл
+        function gameLoop() {
+            // Очистка
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Отрисовка
+            drawBackground();
+            drawDialog();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Обработка кликов
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Проверка клика по кнопке Новой Почты
+            if (checkEndButtonClick(x, y)) {
+                window.open('https://novaposhta.ua/', '_blank');
+                return;
+            }
+            
+            // Проверка клика по кнопкам выбора
+            const choiceIndex = checkChoiceClick(x, y);
+            if (choiceIndex !== -1) {
+                handleChoice(choiceIndex);
+                return;
+            }
+            
+            // Обычный клик для продолжения
+            nextText();
+        });
+        
+        // Начало игры
+        function startGame() {
+            currentScene = 1;
+            currentText = 0;
+            showText();
+            gameLoop();
+        }
+        
+        // Загрузка и начало
+        loadImages();
+    </script>
+</body>
+</html>
