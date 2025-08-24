@@ -1,2 +1,2 @@
-# novaposhtaquest.github.io
+# novaposhtaquest
 Квест, визуальная новелла про рыцаря Новой Почты!
